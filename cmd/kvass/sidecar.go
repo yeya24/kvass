@@ -71,13 +71,21 @@ var sidecarCmd = &cobra.Command{
 			injector      = sidecar.NewInjector(sidecarCfg.configFile, sidecarCfg.configOutFile, sidecar.InjectConfigOptions{
 				ProxyURL: sidecarCfg.injectProxyURL,
 			}, lg.WithField("component", "injector"))
-			promCli = prom.NewClient(sidecarCfg.prometheusURL)
-			wb      = sidecar.NewAPI(sidecarCfg.prometheusURL, proxy,
-				func() (bytes []byte, e error) {
-					return ioutil.ReadFile(sidecarCfg.configFile)
-				}, log.WithField("component", "web"),
-			)
 		)
+
+		promCli, err := prom.NewClient(sidecarCfg.prometheusURL)
+		if err != nil {
+			return err
+		}
+
+		wb, err := sidecar.NewAPI(sidecarCfg.prometheusURL, proxy,
+			func() (bytes []byte, e error) {
+				return ioutil.ReadFile(sidecarCfg.configFile)
+			}, log.WithField("component", "web"),
+		)
+		if err != nil {
+			return err
+		}
 
 		configLoaded := make(chan interface{})
 		configInit := false

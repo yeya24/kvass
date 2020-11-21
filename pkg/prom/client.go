@@ -18,39 +18,35 @@
 package prom
 
 import (
+	"context"
 	"tkestack.io/kvass/pkg/api"
 
-	v1 "github.com/prometheus/prometheus/web/api/v1"
+	promapi "github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 // Client is a client to do prometheus API request
 type Client struct {
 	url string
+	c   promapi.Client
 }
 
 // NewClient return an cli with url
-func NewClient(url string) *Client {
+func NewClient(url string) (*Client, error) {
+	c, err := promapi.NewClient(promapi.Config{Address: url})
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		url: url,
-	}
+		c:   c,
+	}, nil
 }
 
 // RuntimeInfo return the current status of this shard, only return tManager targets if scrapingOnly is true,
 // otherwise ,all target this cli discovered will be returned
-func (c *Client) RuntimeInfo() (*RuntimeInfo, error) {
-	ret := &RuntimeInfo{}
-	return ret, api.Get(c.url+"/api/v1/status/runtimeinfo", ret)
-}
-
-// Targets is compatible with prometheusURL /api/v1/targets
-// the origin prometheusURL's Config is injected, so the targets it report must be adjusted by cli sidecar
-func (c *Client) Targets(state string) (*v1.TargetDiscovery, error) {
-	url := c.url + "/api/v1/targets"
-	if state != "" {
-		url += "?state=" + state
-	}
-	ret := &v1.TargetDiscovery{}
-	return ret, api.Get(url, ret)
+func (c *Client) RuntimeInfo() (promv1.RuntimeinfoResult, error) {
+	return promv1.NewAPI(c.c).Runtimeinfo(context.TODO())
 }
 
 // ConfigReload do Config reloading

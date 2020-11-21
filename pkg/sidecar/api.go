@@ -34,15 +34,20 @@ func NewAPI(
 	promURL string,
 	proxy *Proxy,
 	readConfig func() ([]byte, error),
-	lg logrus.FieldLogger) *API {
+	lg logrus.FieldLogger) (*API, error) {
 	w := &API{
 		ConfigReload: make(chan *config.Config, 2),
 		TargetReload: make(chan map[string][]*target.Target, 2),
 		Engine:       gin.Default(),
 		lg:           lg,
 		promURL:      promURL,
-		promCli:      prom.NewClient(promURL),
 		proxy:        proxy,
+	}
+
+	var err error
+	w.promCli, err = prom.NewClient(promURL)
+	if err != nil {
+		return nil, err
 	}
 
 	w.GET(w.path("/api/v1/shard/runtimeinfo/"), api.Wrap(w.lg, w.runtimeInfo))
@@ -54,7 +59,7 @@ func NewAPI(
 	w.POST(w.path("/-/reload/"), api.Wrap(lg, func(ctx *gin.Context) *api.Result {
 		return prom.APIReloadConfig(readConfig, w.ConfigReload)
 	}))
-	return w
+	return w, nil
 }
 
 func (w *API) path(p string) string {
@@ -83,15 +88,16 @@ func (w *API) runtimeInfo(g *gin.Context) *api.Result {
 		return api.InternalErr(err, "get runtime from prometheus")
 	}
 
-	min := int64(0)
+	sum := int64(0)
 	for _, r := range w.proxy.targets {
-		min += r.Series
+		sum += r.Series
 	}
 
-	if r.TimeSeriesCount < min {
-		r.TimeSeriesCount = min
+	timeSeriesCount := int64(r.TimeSeriesCount)
+	if timeSeriesCount < sum {
+		timeSeriesCount = sum
 	}
-	return api.Data(&shard.RuntimeInfo{HeadSeries: r.TimeSeriesCount})
+	return api.Data(&shard.RuntimeInfo{HeadSeries: timeSeriesCount})
 }
 
 func (w *API) getTargets(g *gin.Context) *api.Result {
